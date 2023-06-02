@@ -372,6 +372,10 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
       p%rotors(iR)%TFin%TFinArea    = InputFileData%rotors(iR)%TFin%TFinArea
       p%rotors(iR)%TFin%TFinIndMod  = InputFileData%rotors(iR)%TFin%TFinIndMod
       p%rotors(iR)%TFin%TFinAFID    = InputFileData%rotors(iR)%TFin%TFinAFID
+      p%rotors(iR)%TFin%TFinType    = InputFileData%rotors(iR)%TFin%TFinType
+      p%rotors(iR)%TFin%TFinWidth   = InputFileData%rotors(iR)%TFin%TFinWidth
+      p%rotors(iR)%TFin%TFinKv      = InputFileData%rotors(iR)%TFin%TFinKv
+      p%rotors(iR)%TFin%TFinCDc     = InputFileData%rotors(iR)%TFin%TFinCDc
    enddo
   
       !............................................................................................
@@ -4310,6 +4314,17 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
    real(ReKi)              :: force_tf(3)       ! force in tf system
    real(ReKi)              :: moment_tf(3)      ! moment in tf system
    real(ReKi)              :: alpha, Re, Cx, Cy, q ! Cl, Cd, Cm, 
+   ! USB variables
+   real(ReKi)              :: x1, x2, x3, x4    ! scaling functions for different contributions on CN
+   real(ReKi)              :: gam               ! yaw angle, TODO potentially get rid of me
+   real(ReKi)              :: Kv, CDc           ! Vortex lift, drag at high aoa 
+   real(ReKi)              :: c0, b0            ! chord and width
+   real(ReKi)              :: U0, Ux, Uy        ! wind speed component
+   real(ReKi)              :: N, Mtf            ! normal force and moment at ref point
+   real(ReKi)              :: V_wnd_tf(3)       ! wind velocity in tailfin system
+   real(ReKi)              :: V_str_tf(3)       ! structural velocity in tailfin system
+   real(ReKi)              :: omega_tf(3)       ! Rotational velocity of tailfin
+   real(ReKi)              :: gamdot            ! 
    type(AFI_OutputType)    :: AFI_interp  ! Resulting values from lookup table
    integer(intKi)          :: ErrStat2
    character(ErrMsgLen)    :: ErrMsg2
@@ -4362,8 +4377,50 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
       y%TFinLoad%Moment(1:3,1) = matmul(transpose(u%TFinMotion%Orientation(:,:,1)), moment_tf)
 
    elseif (p%TFin%TFinMod==TFinAero_USB) then
-      call SetErrStat(ErrID_Fatal, 'Tail fin USB model not yet available', ErrStat, ErrMsg, RoutineName )
-      return
+      ! --- USB model
+      if (p%TFin%TFinType == TFinType_DeltaWing) then
+         ! Transfer to tail fin coordinates
+         V_wnd_tf = matmul(u%TFinMotion%Orientation(:,:,1), V_wnd) ! from global to tailfin
+         V_str_tf = matmul(u%TFinMotion%Orientation(:,:,1), V_str) ! from global to tailfin
+         omega_tf = matmul(u%TFinMotion%Orientation(:,:,1), u%TFinMotion%RotationVel(:,1)) ! from global to tailfin
+         ! Going from general variables to specific variables
+         Ux = V_wnd_tf(1)
+         Uy = V_wnd_tf(2)
+         U0 = sqrt(Ux**2 + Uy**2)
+         gam = - atan2( Uy, Ux )
+         !gamdot = -V_str_tf(2)/c0 ! TODO
+         gamdot = -omega_tf(3) ! TODO
+         ! scaling functions
+         !xi =   1    / (1 + exp[sigma_i    (gam*180/pi - alpha_i^*) ] )
+         x1 = 1._ReKi / (1 + exp( 0.3_ReKi * (gam*R2D - 30_ReKi    ) ) )
+         x2 = 1._ReKi / (1 + exp( 0.1_ReKi * (gam*R2D - 60_ReKi    ) ) )
+         x3 = 1._ReKi / (1 + exp( 0.1_ReKi * (gam*R2D - 60_ReKi    ) ) )
+         ! Shorten notations
+         Kv  = p%TFin%TFinKv
+         CDc = p%TFin%TFinCDc
+         c0  = p%TFin%TFinChord
+         b0  = p%TFin%TFinWidth
+         ! Normal force
+         ! TODO equation below are likely wrong. Also not final.
+         N = ( c0 * (b0*x1*U0*cos(gam) ) +  c0/PI*(2*U0*sin(gam) + c0*abs(gamdot))*(x2*Kv+(1-x3)*CDc) ) * gamdot
+         N = N + U0**2 * sin(gam) * (  b0*x1*cos(gam) + c0/pi * (x2*Kv*abs(sin(gam)) + (1-x3)*CDc )   )
+         N = N * (-p%AirDens * PI * b0)*0.25_ReKi
+         ! Moment at ref point (apex)
+         Mtf = 2/3 * c0 * N
+         ! Loads in Tail fin system
+         force_tf(:)    = 0.0_ReKi
+         moment_tf(:)   = 0.0_ReKi
+         force_tf(2)    = N
+         moment_tf(1:2) = 0.0_ReKi
+         moment_tf(3)   = Mtf
+         ! Transfer to global
+         y%TFinLoad%Force(1:3,1)  = matmul(transpose(u%TFinMotion%Orientation(:,:,1)), force_tf)
+         y%TFinLoad%Moment(1:3,1) = matmul(transpose(u%TFinMotion%Orientation(:,:,1)), moment_tf)
+      else
+         call SetErrStat(ErrID_Fatal, 'Tail fin USB model only available for Delta Wing', ErrStat, ErrMsg, RoutineName )
+         return
+      endif
+    
    endif
 
    ! --- Store
@@ -4376,6 +4433,13 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
    m%TFinSTV_i  = V_str
    m%TFinF_i    = y%TFinLoad%Force(1:3,1) 
    m%TFinM_i    = y%TFinLoad%Moment(1:3,1)
+   !if (p%TFin%TFinMod==TFinAero_USB) then
+      ! NOTE: this is a temporary hack
+      m%TFinVind_i(1) = gam*R2D
+      m%TFinVind_i(2) = U0
+      m%TFinVind_i(3) = N
+      m%TFinRe        = x1
+   !endif
 
 END SUBROUTINE TFin_CalcOutput
 !----------------------------------------------------------------------------------------------------------------------------------

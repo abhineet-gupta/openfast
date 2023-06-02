@@ -55,6 +55,7 @@ IMPLICIT NONE
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinAero_USB = 2      ! unsteady slender body tail fin aerodynamics model [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinIndMod_none = 0      ! no induction [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinIndMod_rotavg = 1      ! rotor averaged induction [-]
+    INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinType_DeltaWing = 1      ! Delta Wing [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: APM_BEM_NoSweepPitchTwist = 1      ! Original AeroDyn model where momentum balance is done in the WithoutSweepPitchTwist system [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: APM_BEM_Polar = 2      ! Use staggered polar grid for momentum balance in each annulus [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: APM_LiftingLine = 3      ! Use the blade lifting line (i.e. the structural) orientation (currently for OLAF with VAWT) [-]
@@ -66,6 +67,10 @@ IMPLICIT NONE
     REAL(ReKi)  :: TFinArea      !< Tail fin planform area [used only when TFinMod=1] [m^2]
     INTEGER(IntKi)  :: TFinIndMod      !< Model for induced velocity calculation {0=none, 1=rotor-average} [(switch)]
     INTEGER(IntKi)  :: TFinAFID      !< Index of Tail fin airfoil number [1 to NumAFfiles] [-]
+    INTEGER(IntKi)  :: TFinType      !< Type of Tail fin (DeltaWing) [-]
+    REAL(ReKi)  :: TFinWidth      !< Tail fin width  [m]
+    REAL(ReKi)  :: TFinKv      !< Vortex lift coefficient [-]
+    REAL(ReKi)  :: TFinCDc      !< Drag ceofficient at hight angle of attack [-]
   END TYPE TFinParameterType
 ! =======================
 ! =========  TFinInputFileType  =======
@@ -77,6 +82,10 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(1:3)  :: TFinAngles      !< Tail fin chordline skew, tilt, and bank angles about the reference point [(deg)]
     INTEGER(IntKi)  :: TFinIndMod      !< Model for induced velocity calculation {0=none, 1=rotor-average} [(switch)]
     INTEGER(IntKi)  :: TFinAFID      !< Index of Tail fin airfoil number [1 to NumAFfiles] [-]
+    INTEGER(IntKi)  :: TFinType      !< Type of Tail fin (DeltaWing) [-]
+    REAL(ReKi)  :: TFinWidth      !< Tail fin width  [m]
+    REAL(ReKi)  :: TFinKv      !< Vortex lift coefficient [-]
+    REAL(ReKi)  :: TFinCDc      !< Drag ceofficient at hight angle of attack [-]
   END TYPE TFinInputFileType
 ! =======================
 ! =========  AD_VTK_BLSurfaceType  =======
@@ -505,6 +514,10 @@ CONTAINS
     DstTFinParameterTypeData%TFinArea = SrcTFinParameterTypeData%TFinArea
     DstTFinParameterTypeData%TFinIndMod = SrcTFinParameterTypeData%TFinIndMod
     DstTFinParameterTypeData%TFinAFID = SrcTFinParameterTypeData%TFinAFID
+    DstTFinParameterTypeData%TFinType = SrcTFinParameterTypeData%TFinType
+    DstTFinParameterTypeData%TFinWidth = SrcTFinParameterTypeData%TFinWidth
+    DstTFinParameterTypeData%TFinKv = SrcTFinParameterTypeData%TFinKv
+    DstTFinParameterTypeData%TFinCDc = SrcTFinParameterTypeData%TFinCDc
  END SUBROUTINE AD_CopyTFinParameterType
 
  SUBROUTINE AD_DestroyTFinParameterType( TFinParameterTypeData, ErrStat, ErrMsg, DEALLOCATEpointers )
@@ -570,6 +583,10 @@ CONTAINS
       Re_BufSz   = Re_BufSz   + 1  ! TFinArea
       Int_BufSz  = Int_BufSz  + 1  ! TFinIndMod
       Int_BufSz  = Int_BufSz  + 1  ! TFinAFID
+      Int_BufSz  = Int_BufSz  + 1  ! TFinType
+      Re_BufSz   = Re_BufSz   + 1  ! TFinWidth
+      Re_BufSz   = Re_BufSz   + 1  ! TFinKv
+      Re_BufSz   = Re_BufSz   + 1  ! TFinCDc
   IF ( Re_BufSz  .GT. 0 ) THEN 
      ALLOCATE( ReKiBuf(  Re_BufSz  ), STAT=ErrStat2 )
      IF (ErrStat2 /= 0) THEN 
@@ -607,6 +624,14 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     IntKiBuf(Int_Xferred) = InData%TFinAFID
     Int_Xferred = Int_Xferred + 1
+    IntKiBuf(Int_Xferred) = InData%TFinType
+    Int_Xferred = Int_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinWidth
+    Re_Xferred = Re_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinKv
+    Re_Xferred = Re_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinCDc
+    Re_Xferred = Re_Xferred + 1
  END SUBROUTINE AD_PackTFinParameterType
 
  SUBROUTINE AD_UnPackTFinParameterType( ReKiBuf, DbKiBuf, IntKiBuf, Outdata, ErrStat, ErrMsg )
@@ -649,6 +674,14 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     OutData%TFinAFID = IntKiBuf(Int_Xferred)
     Int_Xferred = Int_Xferred + 1
+    OutData%TFinType = IntKiBuf(Int_Xferred)
+    Int_Xferred = Int_Xferred + 1
+    OutData%TFinWidth = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
+    OutData%TFinKv = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
+    OutData%TFinCDc = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
  END SUBROUTINE AD_UnPackTFinParameterType
 
  SUBROUTINE AD_CopyTFinInputFileType( SrcTFinInputFileTypeData, DstTFinInputFileTypeData, CtrlCode, ErrStat, ErrMsg )
@@ -673,6 +706,10 @@ CONTAINS
     DstTFinInputFileTypeData%TFinAngles = SrcTFinInputFileTypeData%TFinAngles
     DstTFinInputFileTypeData%TFinIndMod = SrcTFinInputFileTypeData%TFinIndMod
     DstTFinInputFileTypeData%TFinAFID = SrcTFinInputFileTypeData%TFinAFID
+    DstTFinInputFileTypeData%TFinType = SrcTFinInputFileTypeData%TFinType
+    DstTFinInputFileTypeData%TFinWidth = SrcTFinInputFileTypeData%TFinWidth
+    DstTFinInputFileTypeData%TFinKv = SrcTFinInputFileTypeData%TFinKv
+    DstTFinInputFileTypeData%TFinCDc = SrcTFinInputFileTypeData%TFinCDc
  END SUBROUTINE AD_CopyTFinInputFileType
 
  SUBROUTINE AD_DestroyTFinInputFileType( TFinInputFileTypeData, ErrStat, ErrMsg, DEALLOCATEpointers )
@@ -740,6 +777,10 @@ CONTAINS
       Re_BufSz   = Re_BufSz   + SIZE(InData%TFinAngles)  ! TFinAngles
       Int_BufSz  = Int_BufSz  + 1  ! TFinIndMod
       Int_BufSz  = Int_BufSz  + 1  ! TFinAFID
+      Int_BufSz  = Int_BufSz  + 1  ! TFinType
+      Re_BufSz   = Re_BufSz   + 1  ! TFinWidth
+      Re_BufSz   = Re_BufSz   + 1  ! TFinKv
+      Re_BufSz   = Re_BufSz   + 1  ! TFinCDc
   IF ( Re_BufSz  .GT. 0 ) THEN 
      ALLOCATE( ReKiBuf(  Re_BufSz  ), STAT=ErrStat2 )
      IF (ErrStat2 /= 0) THEN 
@@ -785,6 +826,14 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     IntKiBuf(Int_Xferred) = InData%TFinAFID
     Int_Xferred = Int_Xferred + 1
+    IntKiBuf(Int_Xferred) = InData%TFinType
+    Int_Xferred = Int_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinWidth
+    Re_Xferred = Re_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinKv
+    Re_Xferred = Re_Xferred + 1
+    ReKiBuf(Re_Xferred) = InData%TFinCDc
+    Re_Xferred = Re_Xferred + 1
  END SUBROUTINE AD_PackTFinInputFileType
 
  SUBROUTINE AD_UnPackTFinInputFileType( ReKiBuf, DbKiBuf, IntKiBuf, Outdata, ErrStat, ErrMsg )
@@ -836,6 +885,14 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     OutData%TFinAFID = IntKiBuf(Int_Xferred)
     Int_Xferred = Int_Xferred + 1
+    OutData%TFinType = IntKiBuf(Int_Xferred)
+    Int_Xferred = Int_Xferred + 1
+    OutData%TFinWidth = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
+    OutData%TFinKv = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
+    OutData%TFinCDc = ReKiBuf(Re_Xferred)
+    Re_Xferred = Re_Xferred + 1
  END SUBROUTINE AD_UnPackTFinInputFileType
 
  SUBROUTINE AD_CopyVTK_BLSurfaceType( SrcVTK_BLSurfaceTypeData, DstVTK_BLSurfaceTypeData, CtrlCode, ErrStat, ErrMsg )

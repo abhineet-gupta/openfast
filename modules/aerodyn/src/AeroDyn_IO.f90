@@ -1240,19 +1240,25 @@ SUBROUTINE ReadTailFinInputs(FileName, TFData, UnEc, ErrStat, ErrMsg)
    call ParseVar(FileInfo_In, iLine, 'TFinAFID'  , TFData%TFinAFID      , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
    !====== Unsteady slender body model ===================== [used only when TFinMod=2]
    call ParseCom(FileInfo_in, iLine, DummyLine                          , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
-   ! TODO
+   call ParseVar(FileInfo_In, iLine, 'TFinType'  , TFData%TFinType      , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
+   call ParseVar(FileInfo_In, iLine, 'TFinWidth' , TFData%TFinWidth     , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
+   call ParseVar(FileInfo_In, iLine, 'TFinKv'    , TFData%TFinKv        , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
+   call ParseVar(FileInfo_In, iLine, 'TFinCDc'   , TFData%TFinCDc       , ErrStat2, ErrMsg2, UnEc); if (Failed()) return;
 
    ! --- Triggers
    TFData%TFinAngles = TFData%TFinAngles*D2R ! deg2rad
 
    ! --- Validation on the fly
    !if (all((/TFinAero_none,TFinAero_polar, TFinAero_USB/) /= TFData%TFinMod)) then
-   if (all((/TFinAero_none,TFinAero_polar/) /= TFData%TFinMod)) then
-      call Fatal('TFinMod needs to be 0, or 1')
+   if (all((/TFinAero_none,TFinAero_polar,TFinAero_USB/) /= TFData%TFinMod)) then
+      call Fatal('TFinMod needs to be 0, 1, or 2')
    endif
    !if (all((/TFinIndMod_none,TFinIndMod_rotavg/) /= TFData%TFinIndMod)) then
    if (all((/TFinIndMod_none/) /= TFData%TFinIndMod)) then
       call Fatal('TFinIndMod needs to be 0')
+   endif
+   if (all((/TFinType_DeltaWing/) /= TFData%TFinType)) then
+      call Fatal('TFinType needs to be 1')
    endif
 
 contains
