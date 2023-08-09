@@ -150,8 +150,6 @@ Where :math:`\boldsymbol{V}_{\text{ind},\text{blade}}[i_b, i_r]` is the induced 
 More advanced models could set the induced velocity to zero when outside of the wake boundary, or include a tower-shadow-like wake model. Such option is not yet available.
    
 
-
-
 Polar-based model
 -----------------
 
@@ -163,9 +161,38 @@ The user only needs to indicate the index `TFinAFIndex` within the list `AFNames
 Unsteady slender body model
 ---------------------------
 
-The unsteady slender body (USB) model is documented in :cite:`ad-hammam2022`.
+The theory behind the unsteady slender body (USB) model is documented in :cite:`ad-hammam_NREL:2023`.
+The normal force on the tail fin is described in Eqn-5.1 in :cite:`ad-hammam_NREL:2023`.
 
-The theory will be implemented and documented in a future release.
+.. math::  :label: TFUSBForce
 
+    N = -\frac{\pi \rho }{4} \int_{x_p}^{x_p+c_0}\Bigg[b(x)^2\frac{\partial W}{\partial t}+V_x x_1 \frac{\partial W(x,t) b^2(x)}{\partial x}\Bigg] \left(1-\frac{x-x_p}{c_0} \sin \epsilon \right) dx - \\ \frac{\rho}{2} \Big[x_2 K_v+(1- x_3)C_{Dc} \Big] \int_{x_p}^{x_p+c_0}  b(x) {W}^2  dx  
 
+And the moment on the tail fin is described in Eqn-5.2 as
 
+.. math::  :label: TFUSBMoment
+
+    M_a =-\frac{\pi \rho }{4} \int_{x_p}^{x_p+c_0}\Bigg[b^2\frac{\partial W}{\partial t}+V_x x_1 \frac{\partial W(x,t) b^2(x)}{\partial x}\Bigg] \left(1-\frac{x-x_p}{c_0} \sin \epsilon\right)(x-x_p) dx - \\  \frac{\rho}{2} \Big[x_2 K_v+(1- x_3)C_{Dc} \Big] \int_{x_p}^{x_p+c_0} b(x)  (x-x_p) {W}^2  dx
+
+These equations can be simplified by assuming that the downwash W does not depend on x to obtain
+
+.. math::  :label: TFUSBForce_simp
+
+    N = -\frac{\pi \rho }{2} x_1 V_x V_yC_N-\frac{\rho}{2} \Big[x_2 K_v+(1- x_3)C_{Dc} \Big] V_y^2 A_{tf}
+
+and
+
+.. math::  :label: TFUSBMoment_simp
+
+    M_a = -\frac{\pi \rho }{2}V_x V_y x_1 C_M -\frac{\rho}{2} \Big[x_2 K_v+(1- x_3)C_{Dc} \Big] V_y^2 M_{tf}
+
+where
+
+.. math::  :label: TFUSBConstants
+
+    A_f &= \int_0^{c_0}b\,dx\\
+    M_f &= \int_0^{c_0}bx\,dx\\
+    C_N &= \frac{\sin \epsilon}{c_0}\int_0^{c_0}b\frac{\partial b}{\partial x}x^2\,dx - \int_0^{c_0}b\frac{\partial b}{\partial x}x\,dx\\
+    C_M &= \frac{\sin \epsilon}{c_0}\int_0^{c_0}b\frac{\partial b}{\partial x'}x'^2\,dx' - \int_0^{c_0}b\frac{\partial b}{\partial x'}x'\,dx'
+
+and :math:`A_f` is the tail fin area and :math:`M_f` is the moment of area about the reference point about the :math:`Y_{tf}` axis. :math:`c_0` is the chord of the tail fin and :math:`\epsilon` is given by :math:`\sin{\epsilon} = AR/4/\sqrt{1+(AR/4)^2}` where :math:`AR` is the aspect ratio of the tail fin.
