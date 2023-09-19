@@ -56,7 +56,7 @@ typedef  ^  TFinParameterType   IntKi   TFinIndMod -    -   - "Model for induced
 typedef  ^  TFinParameterType   IntKi   TFinAFID   -    -   - "Index of Tail fin airfoil number [1 to NumAFfiles]" -
 typedef  ^  TFinParameterType   IntKi   TFinKp   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
 typedef  ^  TFinParameterType   IntKi   TFinCp   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
-typedef  ^  TFinParameterType   IntKi   TFinSigma   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
+typedef  ^  TFinParameterType   IntKi   TFinSigma   3    -   - "Tail fin emperical constants for vortex separation functions [used only when TFMod=2]" -
 typedef  ^  TFinParameterType   IntKi   TFinAStar   3    -   - "Tail fin initial angles for vortex separation functions [used only when TFMod=2]" deg
 typedef  ^  TFinParameterType   IntKi   TFinKv   -    -   - "Tail fin vortex lift coefficient [used only when TFMod=2]" -
 typedef  ^  TFinParameterType   IntKi   TFinCDc   -    -   - "Tail fin drag coefficient [used only when TFMod=2]" -
@@ -71,7 +71,7 @@ typedef  ^  TFinInputFileType   IntKi   TFinIndMod -    -   - "Model for induced
 typedef  ^  TFinInputFileType   IntKi   TFinAFID   -    -   - "Index of Tail fin airfoil number [1 to NumAFfiles]" -
 typedef  ^  TFinInputFileType   IntKi   TFinKp   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
 typedef  ^  TFinInputFileType   IntKi   TFinCp   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
-typedef  ^  TFinInputFileType   IntKi   TFinSigma   -    -   - "Tail fin emperical constant for vortex separation functions [used only when TFMod=2]" -
+typedef  ^  TFinInputFileType   IntKi   TFinSigma   3    -   - "Tail fin emperical constants for vortex separation functions [used only when TFMod=2]" -
 typedef  ^  TFinInputFileType   ReKi    TFinAStar 3    -   - "Tail fin initial angles for vortex separation functions [used only when TFMod=2]" deg
 typedef  ^  TFinInputFileType   IntKi   TFinKv   -    -   - "Tail fin vortex lift coefficient [used only when TFMod=2]" -
 typedef  ^  TFinInputFileType   IntKi   TFinCDc   -    -   - "Tail fin drag coefficient [used only when TFMod=2]" -
