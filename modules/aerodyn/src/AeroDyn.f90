@@ -4416,9 +4416,9 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
 
    elseif (p%TFin%TFinMod==TFinAero_USB) then
       ! Calculate separation functions
-      x1 = 1.0_Reki/(1+exp(p%TFin%TFinSigma*(alpha-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1+exp(p%TFin%TFinSigma*(alpha-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1+exp(p%TFin%TFinSigma*(alpha-p%TFin%TFinAStar(3))))
+      x1 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(1)*(alpha-p%TFin%TFinAStar(1)))) 
+      x2 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(2)*(alpha-p%TFin%TFinAStar(2)))) 
+      x3 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(3)*(alpha-p%TFin%TFinAStar(3))))
 
       force_tf(2) = 0.5_ReKi * p%AirDens * p%TFin%TFinArea * &
          (p%TFin%TFinKv*x1*V_rel_tf(1)*V_rel_tf(2) + &

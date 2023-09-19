@@ -68,7 +68,7 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: TFinAFID      !< Index of Tail fin airfoil number [1 to NumAFfiles] [-]
     INTEGER(IntKi)  :: TFinKp      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
     INTEGER(IntKi)  :: TFinCp      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
-    INTEGER(IntKi)  :: TFinSigma      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
+    INTEGER(IntKi) , DIMENSION(1:3)  :: TFinSigma      !< Tail fin emperical constants for vortex separation functions [used only when TFMod=2] [-]
     INTEGER(IntKi) , DIMENSION(1:3)  :: TFinAStar      !< Tail fin initial angles for vortex separation functions [used only when TFMod=2] [deg]
     INTEGER(IntKi)  :: TFinKv      !< Tail fin vortex lift coefficient [used only when TFMod=2] [-]
     INTEGER(IntKi)  :: TFinCDc      !< Tail fin drag coefficient [used only when TFMod=2] [-]
@@ -85,7 +85,7 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: TFinAFID      !< Index of Tail fin airfoil number [1 to NumAFfiles] [-]
     INTEGER(IntKi)  :: TFinKp      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
     INTEGER(IntKi)  :: TFinCp      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
-    INTEGER(IntKi)  :: TFinSigma      !< Tail fin emperical constant for vortex separation functions [used only when TFMod=2] [-]
+    INTEGER(IntKi) , DIMENSION(1:3)  :: TFinSigma      !< Tail fin emperical constants for vortex separation functions [used only when TFMod=2] [-]
     REAL(ReKi) , DIMENSION(1:3)  :: TFinAStar      !< Tail fin initial angles for vortex separation functions [used only when TFMod=2] [deg]
     INTEGER(IntKi)  :: TFinKv      !< Tail fin vortex lift coefficient [used only when TFMod=2] [-]
     INTEGER(IntKi)  :: TFinCDc      !< Tail fin drag coefficient [used only when TFMod=2] [-]
@@ -593,7 +593,7 @@ CONTAINS
       Int_BufSz  = Int_BufSz  + 1  ! TFinAFID
       Int_BufSz  = Int_BufSz  + 1  ! TFinKp
       Int_BufSz  = Int_BufSz  + 1  ! TFinCp
-      Int_BufSz  = Int_BufSz  + 1  ! TFinSigma
+      Int_BufSz  = Int_BufSz  + SIZE(InData%TFinSigma)  ! TFinSigma
       Int_BufSz  = Int_BufSz  + SIZE(InData%TFinAStar)  ! TFinAStar
       Int_BufSz  = Int_BufSz  + 1  ! TFinKv
       Int_BufSz  = Int_BufSz  + 1  ! TFinCDc
@@ -638,8 +638,10 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     IntKiBuf(Int_Xferred) = InData%TFinCp
     Int_Xferred = Int_Xferred + 1
-    IntKiBuf(Int_Xferred) = InData%TFinSigma
-    Int_Xferred = Int_Xferred + 1
+    DO i1 = LBOUND(InData%TFinSigma,1), UBOUND(InData%TFinSigma,1)
+      IntKiBuf(Int_Xferred) = InData%TFinSigma(i1)
+      Int_Xferred = Int_Xferred + 1
+    END DO
     DO i1 = LBOUND(InData%TFinAStar,1), UBOUND(InData%TFinAStar,1)
       IntKiBuf(Int_Xferred) = InData%TFinAStar(i1)
       Int_Xferred = Int_Xferred + 1
@@ -694,8 +696,12 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     OutData%TFinCp = IntKiBuf(Int_Xferred)
     Int_Xferred = Int_Xferred + 1
-    OutData%TFinSigma = IntKiBuf(Int_Xferred)
-    Int_Xferred = Int_Xferred + 1
+    i1_l = LBOUND(OutData%TFinSigma,1)
+    i1_u = UBOUND(OutData%TFinSigma,1)
+    DO i1 = LBOUND(OutData%TFinSigma,1), UBOUND(OutData%TFinSigma,1)
+      OutData%TFinSigma(i1) = IntKiBuf(Int_Xferred)
+      Int_Xferred = Int_Xferred + 1
+    END DO
     i1_l = LBOUND(OutData%TFinAStar,1)
     i1_u = UBOUND(OutData%TFinAStar,1)
     DO i1 = LBOUND(OutData%TFinAStar,1), UBOUND(OutData%TFinAStar,1)
@@ -805,7 +811,7 @@ CONTAINS
       Int_BufSz  = Int_BufSz  + 1  ! TFinAFID
       Int_BufSz  = Int_BufSz  + 1  ! TFinKp
       Int_BufSz  = Int_BufSz  + 1  ! TFinCp
-      Int_BufSz  = Int_BufSz  + 1  ! TFinSigma
+      Int_BufSz  = Int_BufSz  + SIZE(InData%TFinSigma)  ! TFinSigma
       Re_BufSz   = Re_BufSz   + SIZE(InData%TFinAStar)  ! TFinAStar
       Int_BufSz  = Int_BufSz  + 1  ! TFinKv
       Int_BufSz  = Int_BufSz  + 1  ! TFinCDc
@@ -858,8 +864,10 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     IntKiBuf(Int_Xferred) = InData%TFinCp
     Int_Xferred = Int_Xferred + 1
-    IntKiBuf(Int_Xferred) = InData%TFinSigma
-    Int_Xferred = Int_Xferred + 1
+    DO i1 = LBOUND(InData%TFinSigma,1), UBOUND(InData%TFinSigma,1)
+      IntKiBuf(Int_Xferred) = InData%TFinSigma(i1)
+      Int_Xferred = Int_Xferred + 1
+    END DO
     DO i1 = LBOUND(InData%TFinAStar,1), UBOUND(InData%TFinAStar,1)
       ReKiBuf(Re_Xferred) = InData%TFinAStar(i1)
       Re_Xferred = Re_Xferred + 1
@@ -923,8 +931,12 @@ CONTAINS
     Int_Xferred = Int_Xferred + 1
     OutData%TFinCp = IntKiBuf(Int_Xferred)
     Int_Xferred = Int_Xferred + 1
-    OutData%TFinSigma = IntKiBuf(Int_Xferred)
-    Int_Xferred = Int_Xferred + 1
+    i1_l = LBOUND(OutData%TFinSigma,1)
+    i1_u = UBOUND(OutData%TFinSigma,1)
+    DO i1 = LBOUND(OutData%TFinSigma,1), UBOUND(OutData%TFinSigma,1)
+      OutData%TFinSigma(i1) = IntKiBuf(Int_Xferred)
+      Int_Xferred = Int_Xferred + 1
+    END DO
     i1_l = LBOUND(OutData%TFinAStar,1)
     i1_u = UBOUND(OutData%TFinAStar,1)
     DO i1 = LBOUND(OutData%TFinAStar,1), UBOUND(OutData%TFinAStar,1)
