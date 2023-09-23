@@ -4416,17 +4416,20 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
 
    elseif (p%TFin%TFinMod==TFinAero_USB) then
       ! Calculate separation functions
-      x1 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(1)*(alpha-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(2)*(alpha-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1+exp(p%TFin%TFinSigma(3)*(alpha-p%TFin%TFinAStar(3))))
-
+      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(1)))) 
+      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(2)))) 
+      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(3))))
+      
+      ! print *,alpha*180.0_ReKi/pi
+      ! print *,alpha
+   
       force_tf(2) = 0.5_ReKi * p%AirDens * p%TFin%TFinArea * &
-         (p%TFin%TFinKv*x1*V_rel_tf(1)*V_rel_tf(2) + &
-         (x2*p%TFin%TFinKv + (1-x3)*p%TFin%TFinCDc) * V_rel_tf(2)*ABS(V_rel_tf(2)))
-      moment_tf(3) = force_tf(2)*p%Tfin%TFinCp
+         (p%TFin%TFinKp * x1 * V_rel_tf(1) * V_rel_tf(2) + &
+         (x2 * p%TFin%TFinKv + (1-x3)*p%TFin%TFinCDc) * V_rel_tf(2) * ABS(V_rel_tf(2)))
+      ! moment_tf(3) =  force_tf(2) * p%Tfin%TFinCp * p%TFin%TFinChord
 
    endif
-
+   
    ! Transfer to global
    y%TFinLoad%Force(1:3,1)  = matmul(transpose(u%TFinMotion%Orientation(:,:,1)), force_tf)
    y%TFinLoad%Moment(1:3,1) = matmul(transpose(u%TFinMotion%Orientation(:,:,1)), moment_tf)
