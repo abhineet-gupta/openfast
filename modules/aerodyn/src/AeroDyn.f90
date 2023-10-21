@@ -4416,9 +4416,9 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
 
    elseif (p%TFin%TFinMod==TFinAero_USB) then
       ! Calculate separation functions
-      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*(alpha*180.0_ReKi/pi-p%TFin%TFinAStar(3))))
+      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(1)))) 
+      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(2)))) 
+      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(3))))
       
       ! print *,alpha*180.0_ReKi/pi
       ! print *,alpha
