@@ -4364,7 +4364,7 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
    real(ReKi)              :: V_str(3)          ! structural velocity
    real(ReKi)              :: force_tf(3)       ! force in tf system
    real(ReKi)              :: moment_tf(3)      ! moment in tf system
-   real(ReKi)              :: alpha, Re, Cx, Cy, q ! Cl, Cd, Cm, 
+   real(ReKi)              :: alpha, Re, Cx, Cy, q, tfingamma ! Cl, Cd, Cm, 
    ! USB variables
    real(ReKi)              :: x1, x2, x3    ! scaling functions for different contributions on CN
 
@@ -4391,6 +4391,8 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
       STOP ! Will never happen
    endif
    V_rel       = V_wnd - V_str + V_ind
+   print *,'V_wnd'
+   print *,V_wnd
    V_rel_tf    = matmul(u%TFinMotion%Orientation(:,:,1), V_rel) ! from inertial to tf system
    alpha       = atan2( V_rel_tf(2), V_rel_tf(1))               ! angle of attack
    V_rel_orth2 = V_rel_tf(1)**2 + V_rel_tf(2)**2                ! square norm of Vrel in tf system
@@ -4417,10 +4419,15 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
       moment_tf(3)   = AFI_interp%Cm * q * p%TFin%TFinChord
 
    elseif (p%TFin%TFinMod==TFinAero_USB) then
-      ! Calculate separation functions
-      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*(ABS(alpha)*180.0_ReKi/pi-p%TFin%TFinAStar(3))))
+      !Calculate separation functions
+      !x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
+      !x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
+      !x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+
+      tfingamma = atan2(u%TFinMotion%orientation(2,1,1),u%TFinMotion%orientation(1,1,1))
+      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
+      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
+      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
       
       ! print *,alpha*180.0_ReKi/pi
       ! print *,alpha
