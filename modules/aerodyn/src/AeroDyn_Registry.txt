@@ -37,6 +37,7 @@ param    ^              -  IntKi    TwrShadow_Eames         -  2  -  "Eames towe
 param    ^              -  IntKi    TFinAero_none           -  0  -  "no tail fin aero"                                   -
 param    ^              -  IntKi    TFinAero_polar          -  1  -  "polar-based tail fin aerodynamics"                  -
 param    ^              -  IntKi    TFinAero_USB            -  2  -  "unsteady slender body tail fin aerodynamics model"  -
+param    ^              -  IntKi    TFinAero_USB_Cont       -  3  -  "unsteady slender body tail fin aerodynamics model with 3 states"  -
 
 param    ^              -  IntKi    TFinIndMod_none         -  0  -  "no induction"                                   -
 param    ^              -  IntKi    TFinIndMod_rotavg       -  1  -  "rotor averaged induction"                       -
@@ -49,7 +50,7 @@ param    ^              -  IntKi    APM_LiftingLine           - 3 -  "Use the bl
 param    ^              -  IntKi    AD_MaxBl_Out            -  3  -  "Maximum number of blades for information output (or linearization)" -
 
 # Tail Fin parameters 
-typedef  ^  TFinParameterType   IntKi   TFinMod    -    -   0 "Tail fin aerodynamics model {0=none, 1=polar-based, 2=USB-based}" (switch)
+typedef  ^  TFinParameterType   IntKi   TFinMod    -    -   0 "Tail fin aerodynamics model {0=none, 1=polar-based, 2=USB-based, 3=USB-based with 3 states}" (switch)
 typedef  ^  TFinParameterType   ReKi    TFinChord  -    -   - "Tail fin chord [used only when TFinMod=1]" m
 typedef  ^  TFinParameterType   ReKi    TFinArea   -    -   - "Tail fin planform area [used only when TFinMod=1]" m^2
 typedef  ^  TFinParameterType   IntKi   TFinIndMod -    -   - "Model for induced velocity calculation {0=none, 1=rotor-average}" (switch)
@@ -239,6 +240,7 @@ typedef  ^  AD_InputFile   RotInputFile  rotors {:} - - "Rotor (blades and tower
 # Define continuous (differentiable) states here:
 typedef	^	RotContinuousStateType	BEMT_ContinuousStateType	BEMT	-	-	-	"Continuous states from the BEMT module"	-
 typedef	^	RotContinuousStateType	AA_ContinuousStateType	AA	-	-	-	"Continuous states from the AA module"	-
+typedef	^	RotContinuousStateType	ReKi                    qTF     {:}	-	-	"Continuous states for tailfin xi models"	-
 
 typedef	^	ContinuousStateType	RotContinuousStateType	rotors	{:}	-	-	"Continuous states for each rotor"	-
 typedef	^	ContinuousStateType	FVW_ContinuousStateType	FVW	-	-	-	"Continuous states from the FVW module"	-
@@ -261,6 +263,7 @@ typedef	^	ConstraintStateType	FVW_ConstraintStateType	FVW	-	-	-	"Constraint stat
 # Define "other" states here:
 typedef	^	RotOtherStateType	BEMT_OtherStateType	BEMT	-	-	-	"OtherStates from the BEMT module"	-
 typedef	^	RotOtherStateType	AA_OtherStateType	AA	-	-	-	"OtherStates from the AA module"	-
+typedef	^	RotOtherStateType	Logical	            TFin_statesInitialized	-	-	.False.	"Are the tailfin states initialized"	-
 
 typedef	^	OtherStateType	RotOtherStateType	rotors	{:}	-	-	"OtherStates from the BEMT module"	-
 typedef	^	OtherStateType	FVW_OtherStateType	FVW	-	-	-	"OtherStates from the FVW module"	-

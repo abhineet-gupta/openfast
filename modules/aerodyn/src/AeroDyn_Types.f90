@@ -53,6 +53,7 @@ IMPLICIT NONE
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinAero_none = 0      ! no tail fin aero [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinAero_polar = 1      ! polar-based tail fin aerodynamics [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinAero_USB = 2      ! unsteady slender body tail fin aerodynamics model [-]
+    INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinAero_USB_Cont = 3      ! unsteady slender body tail fin aerodynamics model with 3 states [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinIndMod_none = 0      ! no induction [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: TFinIndMod_rotavg = 1      ! rotor averaged induction [-]
     INTEGER(IntKi), PUBLIC, PARAMETER  :: APM_BEM_NoSweepPitchTwist = 1      ! Original AeroDyn model where momentum balance is done in the WithoutSweepPitchTwist system [-]
@@ -61,7 +62,7 @@ IMPLICIT NONE
     INTEGER(IntKi), PUBLIC, PARAMETER  :: AD_MaxBl_Out = 3      ! Maximum number of blades for information output (or linearization) [-]
 ! =========  TFinParameterType  =======
   TYPE, PUBLIC :: TFinParameterType
-    INTEGER(IntKi)  :: TFinMod      !< Tail fin aerodynamics model {0=none, 1=polar-based, 2=USB-based} [(switch)]
+    INTEGER(IntKi)  :: TFinMod      !< Tail fin aerodynamics model {0=none, 1=polar-based, 2=USB-based, 3=USB-based with 3 states} [(switch)]
     REAL(ReKi)  :: TFinChord      !< Tail fin chord [used only when TFinMod=1] [m]
     REAL(ReKi)  :: TFinArea      !< Tail fin planform area [used only when TFinMod=1] [m^2]
     INTEGER(IntKi)  :: TFinIndMod      !< Model for induced velocity calculation {0=none, 1=rotor-average} [(switch)]
@@ -262,6 +263,7 @@ IMPLICIT NONE
   TYPE, PUBLIC :: RotContinuousStateType
     TYPE(BEMT_ContinuousStateType)  :: BEMT      !< Continuous states from the BEMT module [-]
     TYPE(AA_ContinuousStateType)  :: AA      !< Continuous states from the AA module [-]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: qTF      !< Continuous states for tailfin xi models [-]
   END TYPE RotContinuousStateType
 ! =======================
 ! =========  AD_ContinuousStateType  =======
@@ -298,6 +300,7 @@ IMPLICIT NONE
   TYPE, PUBLIC :: RotOtherStateType
     TYPE(BEMT_OtherStateType)  :: BEMT      !< OtherStates from the BEMT module [-]
     TYPE(AA_OtherStateType)  :: AA      !< OtherStates from the AA module [-]
+    LOGICAL  :: TFin_statesInitialized      !< Are the tailfin states initialized [-]
   END TYPE RotOtherStateType
 ! =======================
 ! =========  AD_OtherStateType  =======
@@ -6168,6 +6171,7 @@ ENDIF
    CHARACTER(*),    INTENT(  OUT) :: ErrMsg
 ! Local 
    INTEGER(IntKi)                 :: i,j,k
+   INTEGER(IntKi)                 :: i1, i1_l, i1_u  !  bounds (upper/lower) for an array dimension 1
    INTEGER(IntKi)                 :: ErrStat2
    CHARACTER(ErrMsgLen)           :: ErrMsg2
    CHARACTER(*), PARAMETER        :: RoutineName = 'AD_CopyRotContinuousStateType'
@@ -6180,6 +6184,18 @@ ENDIF
       CALL AA_CopyContState( SrcRotContinuousStateTypeData%AA, DstRotContinuousStateTypeData%AA, CtrlCode, ErrStat2, ErrMsg2 )
          CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg,RoutineName)
          IF (ErrStat>=AbortErrLev) RETURN
+IF (ALLOCATED(SrcRotContinuousStateTypeData%qTF)) THEN
+  i1_l = LBOUND(SrcRotContinuousStateTypeData%qTF,1)
+  i1_u = UBOUND(SrcRotContinuousStateTypeData%qTF,1)
+  IF (.NOT. ALLOCATED(DstRotContinuousStateTypeData%qTF)) THEN 
+    ALLOCATE(DstRotContinuousStateTypeData%qTF(i1_l:i1_u),STAT=ErrStat2)
+    IF (ErrStat2 /= 0) THEN 
+      CALL SetErrStat(ErrID_Fatal, 'Error allocating DstRotContinuousStateTypeData%qTF.', ErrStat, ErrMsg,RoutineName)
+      RETURN
+    END IF
+  END IF
+    DstRotContinuousStateTypeData%qTF = SrcRotContinuousStateTypeData%qTF
+ENDIF
  END SUBROUTINE AD_CopyRotContinuousStateType
 
  SUBROUTINE AD_DestroyRotContinuousStateType( RotContinuousStateTypeData, ErrStat, ErrMsg, DEALLOCATEpointers )
@@ -6207,6 +6223,9 @@ ENDIF
      CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
   CALL AA_DestroyContState( RotContinuousStateTypeData%AA, ErrStat2, ErrMsg2, DEALLOCATEpointers_local )
      CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+IF (ALLOCATED(RotContinuousStateTypeData%qTF)) THEN
+  DEALLOCATE(RotContinuousStateTypeData%qTF)
+ENDIF
  END SUBROUTINE AD_DestroyRotContinuousStateType
 
  SUBROUTINE AD_PackRotContinuousStateType( ReKiBuf, DbKiBuf, IntKiBuf, Indata, ErrStat, ErrMsg, SizeOnly )
@@ -6279,6 +6298,11 @@ ENDIF
          Int_BufSz = Int_BufSz + SIZE( Int_Buf )
          DEALLOCATE(Int_Buf)
       END IF
+  Int_BufSz   = Int_BufSz   + 1     ! qTF allocated yes/no
+  IF ( ALLOCATED(InData%qTF) ) THEN
+    Int_BufSz   = Int_BufSz   + 2*1  ! qTF upper/lower bounds for each dimension
+      Re_BufSz   = Re_BufSz   + SIZE(InData%qTF)  ! qTF
+  END IF
   IF ( Re_BufSz  .GT. 0 ) THEN 
      ALLOCATE( ReKiBuf(  Re_BufSz  ), STAT=ErrStat2 )
      IF (ErrStat2 /= 0) THEN 
@@ -6362,6 +6386,21 @@ ENDIF
       ELSE
         IntKiBuf( Int_Xferred ) = 0; Int_Xferred = Int_Xferred + 1
       ENDIF
+  IF ( .NOT. ALLOCATED(InData%qTF) ) THEN
+    IntKiBuf( Int_Xferred ) = 0
+    Int_Xferred = Int_Xferred + 1
+  ELSE
+    IntKiBuf( Int_Xferred ) = 1
+    Int_Xferred = Int_Xferred + 1
+    IntKiBuf( Int_Xferred    ) = LBOUND(InData%qTF,1)
+    IntKiBuf( Int_Xferred + 1) = UBOUND(InData%qTF,1)
+    Int_Xferred = Int_Xferred + 2
+
+      DO i1 = LBOUND(InData%qTF,1), UBOUND(InData%qTF,1)
+        ReKiBuf(Re_Xferred) = InData%qTF(i1)
+        Re_Xferred = Re_Xferred + 1
+      END DO
+  END IF
  END SUBROUTINE AD_PackRotContinuousStateType
 
  SUBROUTINE AD_UnPackRotContinuousStateType( ReKiBuf, DbKiBuf, IntKiBuf, Outdata, ErrStat, ErrMsg )
@@ -6377,6 +6416,7 @@ ENDIF
   INTEGER(IntKi)                 :: Db_Xferred
   INTEGER(IntKi)                 :: Int_Xferred
   INTEGER(IntKi)                 :: i
+  INTEGER(IntKi)                 :: i1, i1_l, i1_u  !  bounds (upper/lower) for an array dimension 1
   INTEGER(IntKi)                 :: ErrStat2
   CHARACTER(ErrMsgLen)           :: ErrMsg2
   CHARACTER(*), PARAMETER        :: RoutineName = 'AD_UnPackRotContinuousStateType'
@@ -6470,6 +6510,24 @@ ENDIF
       IF(ALLOCATED(Re_Buf )) DEALLOCATE(Re_Buf )
       IF(ALLOCATED(Db_Buf )) DEALLOCATE(Db_Buf )
       IF(ALLOCATED(Int_Buf)) DEALLOCATE(Int_Buf)
+  IF ( IntKiBuf( Int_Xferred ) == 0 ) THEN  ! qTF not allocated
+    Int_Xferred = Int_Xferred + 1
+  ELSE
+    Int_Xferred = Int_Xferred + 1
+    i1_l = IntKiBuf( Int_Xferred    )
+    i1_u = IntKiBuf( Int_Xferred + 1)
+    Int_Xferred = Int_Xferred + 2
+    IF (ALLOCATED(OutData%qTF)) DEALLOCATE(OutData%qTF)
+    ALLOCATE(OutData%qTF(i1_l:i1_u),STAT=ErrStat2)
+    IF (ErrStat2 /= 0) THEN 
+       CALL SetErrStat(ErrID_Fatal, 'Error allocating OutData%qTF.', ErrStat, ErrMsg,RoutineName)
+       RETURN
+    END IF
+      DO i1 = LBOUND(OutData%qTF,1), UBOUND(OutData%qTF,1)
+        OutData%qTF(i1) = ReKiBuf(Re_Xferred)
+        Re_Xferred = Re_Xferred + 1
+      END DO
+  END IF
  END SUBROUTINE AD_UnPackRotContinuousStateType
 
  SUBROUTINE AD_CopyContState( SrcContStateData, DstContStateData, CtrlCode, ErrStat, ErrMsg )
@@ -8217,6 +8275,7 @@ ENDIF
       CALL AA_CopyOtherState( SrcRotOtherStateTypeData%AA, DstRotOtherStateTypeData%AA, CtrlCode, ErrStat2, ErrMsg2 )
          CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg,RoutineName)
          IF (ErrStat>=AbortErrLev) RETURN
+    DstRotOtherStateTypeData%TFin_statesInitialized = SrcRotOtherStateTypeData%TFin_statesInitialized
  END SUBROUTINE AD_CopyRotOtherStateType
 
  SUBROUTINE AD_DestroyRotOtherStateType( RotOtherStateTypeData, ErrStat, ErrMsg, DEALLOCATEpointers )
@@ -8316,6 +8375,7 @@ ENDIF
          Int_BufSz = Int_BufSz + SIZE( Int_Buf )
          DEALLOCATE(Int_Buf)
       END IF
+      Int_BufSz  = Int_BufSz  + 1  ! TFin_statesInitialized
   IF ( Re_BufSz  .GT. 0 ) THEN 
      ALLOCATE( ReKiBuf(  Re_BufSz  ), STAT=ErrStat2 )
      IF (ErrStat2 /= 0) THEN 
@@ -8399,6 +8459,8 @@ ENDIF
       ELSE
         IntKiBuf( Int_Xferred ) = 0; Int_Xferred = Int_Xferred + 1
       ENDIF
+    IntKiBuf(Int_Xferred) = TRANSFER(InData%TFin_statesInitialized, IntKiBuf(1))
+    Int_Xferred = Int_Xferred + 1
  END SUBROUTINE AD_PackRotOtherStateType
 
  SUBROUTINE AD_UnPackRotOtherStateType( ReKiBuf, DbKiBuf, IntKiBuf, Outdata, ErrStat, ErrMsg )
@@ -8507,6 +8569,8 @@ ENDIF
       IF(ALLOCATED(Re_Buf )) DEALLOCATE(Re_Buf )
       IF(ALLOCATED(Db_Buf )) DEALLOCATE(Db_Buf )
       IF(ALLOCATED(Int_Buf)) DEALLOCATE(Int_Buf)
+    OutData%TFin_statesInitialized = TRANSFER(IntKiBuf(Int_Xferred), OutData%TFin_statesInitialized)
+    Int_Xferred = Int_Xferred + 1
  END SUBROUTINE AD_UnPackRotOtherStateType
 
  SUBROUTINE AD_CopyOtherState( SrcOtherStateData, DstOtherStateData, CtrlCode, ErrStat, ErrMsg )

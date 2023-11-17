@@ -394,8 +394,8 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
       p%rotors(iR)%TFin%TFinAFID    = InputFileData%rotors(iR)%TFin%TFinAFID
       p%rotors(iR)%TFin%TFinKp      = InputFileData%rotors(iR)%TFin%TFinKp
       p%rotors(iR)%TFin%TFinCp      = InputFileData%rotors(iR)%TFin%TFinCp
-      p%rotors(iR)%TFin%TFinSigma      = InputFileData%rotors(iR)%TFin%TFinSigma
-      p%rotors(iR)%TFin%TFinAStar      = InputFileData%rotors(iR)%TFin%TFinAStar
+      p%rotors(iR)%TFin%TFinSigma   = InputFileData%rotors(iR)%TFin%TFinSigma
+      p%rotors(iR)%TFin%TFinAStar   = InputFileData%rotors(iR)%TFin%TFinAStar
       p%rotors(iR)%TFin%TFinKv      = InputFileData%rotors(iR)%TFin%TFinKv
       p%rotors(iR)%TFin%TFinCDc     = InputFileData%rotors(iR)%TFin%TFinCDc
    enddo
@@ -477,6 +477,16 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
       !............................................................................................
       ! Initialize states and misc vars
       !............................................................................................
+   do iR = 1, nRotors
+      if (p%rotors(iR)%TFinAero) then
+         if (p%rotors(iR)%TFin%TFinMod==TFinAero_USB_Cont) then
+            call AllocAry( x%rotors(iR)%qTF, 3, 'qTF', errStat, errMsg); if(Failed()) return
+            x%rotors(iR)%qTF(:) = 0.0_ReKi 
+            ! NOTE: we can't initialize to the quasi-steady values without knowing the wind speed.
+            OtherState%rotors(iR)%TFin_statesInitialized = .False.
+         endif
+      endif
+   enddo
       
       ! many states are in the BEMT module, which were initialized in BEMT_Init()
       
@@ -1579,6 +1589,95 @@ subroutine AD_End( u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
 
 END SUBROUTINE AD_End
 !----------------------------------------------------------------------------------------------------------------------------------
+!> Fourth-order Runge-Kutta Method (RK4) for numerically integration
+!! NOTE: For TailFin only... TailFin model should be placed as a submodule of AeroDyn in the future.
+subroutine AD_RK4( t, n, u, utimes, p, x, xd, z, OtherState, m, errStat, errMsg )
+   real(DbKi),                   intent(in   ) :: t          !< Current simulation time in seconds
+   integer(IntKi),               intent(in   ) :: n          !< time step number
+   type(AD_InputType),           intent(inout) :: u(:)       !< Inputs at t
+   real(DbKi),                   intent(in   ) :: utimes(:)  !< times of input
+   type(AD_ParameterType),       intent(in   ) :: p          !< Parameters
+   type(AD_ContinuousStateType), intent(inout) :: x          !< Continuous states at t on input at t + dt on output
+   type(AD_DiscreteStateType),   intent(in   ) :: xd         !< Discrete states at t
+   type(AD_ConstraintStateType), intent(in   ) :: z          !< Constraint states at t (possibly a guess)
+   type(AD_OtherStateType),      intent(inout) :: OtherState !< Other states at t on input at t + dt on output
+   type(AD_MiscVarType),         intent(inout) :: m          !< Misc/optimization variables
+   integer(IntKi),               intent(out)   :: errStat    !< Error status of the operation
+   character(*),                 intent(out)   :: errMsg     !< Error message if errStat /= ErrID_None
+   ! local variables
+   type(AD_ContinuousStateType)                 :: xdot        ! time derivatives of continuous states      
+   type(AD_ContinuousStateType)                 :: k1          ! RK4 constant; see above
+   type(AD_ContinuousStateType)                 :: k2          ! RK4 constant; see above 
+   type(AD_ContinuousStateType)                 :: k3          ! RK4 constant; see above 
+   type(AD_ContinuousStateType)                 :: k4          ! RK4 constant; see above 
+   type(AD_ContinuousStateType)                 :: x_tmp       ! Holds temporary modification to x
+   type(AD_InputType)                           :: u_interp    ! interpolated value of inputs 
+   integer :: iR
+   ! Initialize errStat
+   errStat = ErrID_None
+   errMsg  = "" 
+   
+   ! Initialize interim vars
+   call AD_CopyContState( x, k1,       MESH_NEWCOPY, errStat, errMsg )
+   call AD_CopyContState( x, k2,       MESH_NEWCOPY, errStat, errMsg )
+   call AD_CopyContState( x, k3,       MESH_NEWCOPY, errStat, errMsg )
+   call AD_CopyContState( x, k4,       MESH_NEWCOPY, errStat, errMsg )
+   call AD_CopyContState( x, x_tmp,    MESH_NEWCOPY, errStat, errMsg )
+   
+   ! interpolate u to find u_interp = u(t)
+   call AD_CopyInput(u(1), u_interp, MESH_NEWCOPY, errStat, errMsg  )  ! we need to allocate input arrays/meshes before calling ExtrapInterp...     
+   call AD_Input_ExtrapInterp( u, utimes, u_interp, t, errStat, errMsg )
+   
+   ! find xdot at t
+   call AD_CalcContStateDeriv( t, u_interp, p, x, xd, z, OtherState, m, xdot, errStat, errMsg ) !initializes xdot
+   
+   do iR=1,size(x%rotors)
+      k1%rotors(iR)%qTF    = p%dt * xdot%rotors(iR)%qTF
+      x_tmp%rotors(iR)%qTF = x%rotors(iR)%qTF    + 0.5_ReKi * k1%rotors(iR)%qTF
+   enddo
+   
+   ! interpolate u to find u_interp = u(t + dt/2)
+   call AD_Input_ExtrapInterp(u, utimes, u_interp, t+0.5_ReKi*p%dt, errStat, errMsg)
+   
+   ! find xdot at t + dt/2
+   call AD_CalcContStateDeriv( t + 0.5_ReKi*p%dt, u_interp, p, x_tmp, xd, z, OtherState, m, xdot, errStat, errMsg )
+   
+   do iR=1,size(x%rotors)
+      k2%rotors(iR)%qTF    = p%dt * xdot%rotors(iR)%qTF
+      x_tmp%rotors(iR)%qTF = x%rotors(iR)%qTF    + 0.5_ReKi * k2%rotors(iR)%qTF
+   enddo
+   
+   ! find xdot at t + dt/2
+   call AD_CalcContStateDeriv( t + 0.5_ReKi*p%dt, u_interp, p, x_tmp, xd, z, OtherState, m, xdot, errStat, errMsg )
+   
+   do iR=1,size(x%rotors)
+      k3%rotors(iR)%qTF    = p%dt * xdot%rotors(iR)%qTF
+      x_tmp%rotors(iR)%qTF = x%rotors(iR)%qTF    + k3%rotors(iR)%qTF
+   enddo
+   
+   ! interpolate u to find u_interp = u(t + dt)
+   call AD_Input_ExtrapInterp(u, utimes, u_interp, t + p%dt, errStat, errMsg)
+   
+   ! find xdot at t + dt
+   call AD_CalcContStateDeriv( t + p%dt, u_interp, p, x_tmp, xd, z, OtherState, m, xdot, errStat, errMsg )
+   do iR=1,size(x%rotors)
+      k4%rotors(iR)%qTF   = p%dt * xdot%rotors(iR)%qTF
+      x%rotors(iR)%qTF    = x%rotors(iR)%qTF    +  ( k1%rotors(iR)%qTF    + 2._ReKi * k2%rotors(iR)%qTF    + 2._ReKi * k3%rotors(iR)%qTF    + k4%rotors(iR)%qTF    ) / 6._ReKi
+   enddo
+   call CleanUp()
+contains      
+   subroutine CleanUp()
+      integer(IntKi)             :: errStat3    ! The error identifier (errStat)
+      character(1024)            :: errMsg3     ! The error message (errMsg)
+      call AD_DestroyContState( xdot,     errStat3, errMsg3 )
+      call AD_DestroyContState( k1,       errStat3, errMsg3 )
+      call AD_DestroyContState( k2,       errStat3, errMsg3 )
+      call AD_DestroyContState( k3,       errStat3, errMsg3 )
+      call AD_DestroyContState( k4,       errStat3, errMsg3 )
+      call AD_DestroyContState( x_tmp,    errStat3, errMsg3 )
+      call AD_DestroyInput(     u_interp, errStat3, errMsg3 )
+   end subroutine CleanUp            
+end subroutine AD_RK4
 !> Loose coupling routine for solving for constraint states, integrating continuous states, and updating discrete and other states.
 !! Continuous, constraint, discrete, and other states are updated for t + Interval
 subroutine AD_UpdateStates( t, n, u, utimes, p, x, xd, z, OtherState, m, errStat, errMsg )
@@ -1669,6 +1768,27 @@ subroutine AD_UpdateStates( t, n, u, utimes, p, x, xd, z, OtherState, m, errStat
       ! UA TODO
       !call UA_UpdateState_Wrapper(p%AFI, n, p%FVW, x%FVW, xd%FVW, OtherState%FVW, m%FVW, ErrStat2, ErrMsg2)
       !   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   endif
+
+   ! Tail fin update states
+   ! NOTE: doing a lazy check for first rotor
+   if (p%rotors(1)%TFinAero.and.(p%rotors(1)%TFin%TFinMod==TFinAero_USB_Cont)) then
+      do iR = 1,size(p%rotors)
+         if (.not.OtherState%rotors(iR)%TFin_statesInitialized) then
+            ! Use Quasi-steady value here
+            ! TODO Abhineet
+            ! Compute quasi-steady value of x1-x3 the same way as the quasi-steady model
+            ! The best could be to write a small function that does that, and reuse it here and in the TFin_CalcOutput
+            x%rotors(iR)%qTF(1) = 0
+            x%rotors(iR)%qTF(2) = 0
+            x%rotors(iR)%qTF(3) = 0
+
+            OtherState%rotors(iR)%TFin_statesInitialized=.true.
+         endif
+         !call TFin_RK4( t, n, u(p%rotors(iR)%Inputs, utimes, p, x%rotors(iR)%TFin, m%rotors(iR), errStat, errMsg )
+      enddo
+      call AD_RK4(t, n, u, utimes, p, x, xd, z, OtherState, m, errStat2, errMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    endif
            
    call Cleanup()
@@ -1836,7 +1956,7 @@ subroutine RotCalcOutput( t, u, p, p_AD, x, xd, z, OtherState, y, m, m_AD, iRot,
 
    ! --- Tail Fin
    if (p%TFinAero) then
-      call TFin_CalcOutput(p, p_AD, u, m, y, ErrStat2, ErrMsg2)
+      call TFin_CalcOutput(p, p_AD, x, u, m, OtherState, y, ErrStat2, ErrMsg2)
    endif
    
    
@@ -2442,6 +2562,52 @@ subroutine RotCalcConstrStateResidual( Time, u, p, p_AD, x, xd, z, OtherState, m
       call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    
 end subroutine RotCalcConstrStateResidual
+!----------------------------------------------------------------------------------------------------------------------------------
+!> Tight coupling routine for computing derivatives of continuous states, CCSD
+subroutine AD_CalcContStateDeriv( t, u, p, x, xd, z, OtherState, m, dxdt, ErrStat, ErrMsg )
+   REAL(DbKi),                     INTENT(IN   )  :: t           ! Current simulation time in seconds
+   TYPE(AD_InputType),             INTENT(IN   )  :: u           ! Inputs at t
+   TYPE(AD_ParameterType),         INTENT(IN   )  :: p           ! Parameters
+   TYPE(AD_ContinuousStateType),   INTENT(IN   )  :: x           ! Continuous states at t
+   TYPE(AD_DiscreteStateType),     INTENT(IN   )  :: xd          ! Discrete states at t
+   TYPE(AD_ConstraintStateType),   INTENT(IN   )  :: z           ! Constraint states at t
+   TYPE(AD_OtherStateType),        INTENT(IN   )  :: OtherState  ! Other states at t
+   TYPE(AD_MiscVarType),           INTENT(INOUT)  :: m           ! Misc/optimization variables
+   TYPE(AD_ContinuousStateType),   INTENT(INOUT)  :: dxdt        ! Continuous state derivatives at t
+   INTEGER(IntKi),                 INTENT(  OUT)  :: ErrStat     ! Error status of the operation
+   CHARACTER(*),                   INTENT(  OUT)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+
+   ! local variables
+   CHARACTER(ErrMsgLen)                           :: ErrMsg2     ! temporary Error message if ErrStat /= ErrID_None
+   INTEGER(IntKi)                                 :: ErrStat2    ! temporary Error status of the operation
+   CHARACTER(*), PARAMETER                        :: RoutineName = 'RotCalcContStateDeriv'
+   
+   INTEGER(IntKi), parameter                      :: InputIndex = 1
+   integer :: iR
+
+      ! Initialize ErrStat
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   ! TailFin
+   do iR = 1,size(x%rotors)
+      if (p%rotors(iR)%TFinAero .and.(p%rotors(iR)%TFin%TFinMod==TFinAero_USB_Cont)) then
+         ! Allocation of output dxdt (since intent(out))
+         call AllocAry(dxdt%rotors(iR)%qTF, 3, 'dxdt%qTF', errStat2, errMsg2);
+         ! TODO Abhineet
+         ! Compute alpha.. potentially use a dedicated function that can be reused
+         !tfingamma = atan2(u%TFinMotion%orientation(2,1,1),u%TFinMotion%orientation(1,1,1))
+         !x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
+         !x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
+         !x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+         dxdt%rotors(iR)%qTF(1) = 0.0
+         dxdt%rotors(iR)%qTF(2) = 0.0
+         dxdt%rotors(iR)%qTF(3) = 0.0
+      endif
+   enddo
+   
+END SUBROUTINE AD_CalcContStateDeriv
 
 !----------------------------------------------------------------------------------------------------------------------------------
 subroutine RotCalcContStateDeriv( t, u, p, p_AD, x, xd, z, OtherState, m, dxdt, ErrStat, ErrMsg )
@@ -3768,6 +3934,13 @@ SUBROUTINE ValidateInputData( InitInp, InputFileData, NumBl, ErrStat, ErrMsg )
    !..................
    do iR = 1,size(NumBl)
       if (InputFileData%rotors(iR)%TFinAero) then
+         if (InputFileData%rotors(iR)%TFin%TFinMod==TFinAero_USB_Cont) then
+            if (InitInp%Linearize) then
+               call Fatal('Cannot linearize with TFinMod is 3.')
+            endif
+         endif
+
+
          ! Check AFID
          if (InputFileData%rotors(iR)%TFin%TFinMod==TFinAero_polar) then
             k = InputFileData%rotors(iR)%TFin%TFinAFID
@@ -4345,12 +4518,14 @@ contains
 END SUBROUTINE Init_OLAF
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This subroutine calculates the tower loads for the AeroDyn TowerLoad output mesh.
-SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
+SUBROUTINE TFin_CalcOutput(p, p_AD, x, u, m, OtherState, y, ErrStat, ErrMsg )
 
    TYPE(RotInputType),           INTENT(IN   )  :: u           !< Inputs at Time t
    TYPE(RotParameterType),       INTENT(IN   )  :: p           !< Parameters
+   TYPE(RotContinuousStateType), INTENT(IN   )  :: x           !< States
    TYPE(AD_ParameterType),       INTENT(IN   )  :: p_AD        !< Parameters
    TYPE(RotMiscVarType),         INTENT(INOUT)  :: m           !< Misc/optimization variables
+   TYPE(RotOtherStateType),      INTENT(IN   )  :: OtherState  !< OtherState computed at t
    TYPE(RotOutputType),          INTENT(INOUT)  :: y           !< Outputs computed at t
    INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat     !< Error status of the operation
    CHARACTER(*),                 INTENT(  OUT)  :: ErrMsg      !< Error message if ErrStat /= ErrID_None
@@ -4418,17 +4593,34 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, m, y, ErrStat, ErrMsg )
       force_tf(2)    = Cy * q
       moment_tf(3)   = AFI_interp%Cm * q * p%TFin%TFinChord
 
-   elseif (p%TFin%TFinMod==TFinAero_USB) then
-      !Calculate separation functions
-      !x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
-      !x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
-      !x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+   elseif (p%TFin%TFinMod==TFinAero_USB .or. p%TFin%TFinMod==TFinAero_USB_Cont) then
 
-      tfingamma = atan2(u%TFinMotion%orientation(2,1,1),u%TFinMotion%orientation(1,1,1))
-      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+      if (p%TFin%TFinMod==TFinAero_USB) then
+         !Calculate separation functions
+         !x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
+         !x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
+         !x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(alpha)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+
+         tfingamma = atan2(u%TFinMotion%orientation(2,1,1),u%TFinMotion%orientation(1,1,1))
+         x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
+         x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
+         x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(tfingamma)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+      else
+         ! Continuous state-space formulation
+         if (.not.OtherState%TFin_statesInitialized) then
+            ! TODO Abhineet Initialize using quasi-steady values (similar as above, but we might want a dedicated function to "unify")
+            x1 = 0
+            x2 = 0
+            x3 = 0
+            ! 
+         else
+            x1 = x%qTF(1)
+            x2 = x%qTF(2)
+            x3 = x%qTF(3)
+         endif
+      endif
       
+
       ! print *,alpha*180.0_ReKi/pi
       ! print *,alpha
    
